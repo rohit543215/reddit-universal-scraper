@@ -3,6 +3,8 @@ Reddit Scraper Suite - Configuration
 """
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv()
 
 # --- PATHS ---
 BASE_DIR = Path(__file__).parent

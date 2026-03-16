@@ -61,14 +61,32 @@ st.markdown("""
 def load_subreddit_data(subreddit_path):
     """Load all data for a subreddit."""
     data = {}
+
+    def safe_read_csv(file_path):
+        """Read CSV defensively so bad or empty files do not crash the dashboard."""
+        try:
+            return pd.read_csv(file_path)
+        except pd.errors.EmptyDataError:
+            st.warning(f"Skipping empty CSV: {file_path.name}")
+        except pd.errors.ParserError as exc:
+            st.warning(f"Skipping malformed CSV {file_path.name}: {exc}")
+        except UnicodeDecodeError:
+            st.warning(f"Skipping unreadable CSV encoding: {file_path.name}")
+        except Exception as exc:
+            st.warning(f"Could not read {file_path.name}: {exc}")
+        return None
     
     posts_file = subreddit_path / 'posts.csv'
     if posts_file.exists():
-        data['posts'] = pd.read_csv(posts_file)
+        posts_df = safe_read_csv(posts_file)
+        if posts_df is not None:
+            data['posts'] = posts_df
     
     comments_file = subreddit_path / 'comments.csv'
     if comments_file.exists():
-        data['comments'] = pd.read_csv(comments_file)
+        comments_df = safe_read_csv(comments_file)
+        if comments_df is not None:
+            data['comments'] = comments_df
     
     return data
 
@@ -526,14 +544,13 @@ def main():
                 if not new_sub:
                     st.error("Please enter a subreddit/user name!")
                 else:
-                    target_cmd = ["python", "-u", "main.py", new_sub, "--mode", mode, "--limit", str(limit)]
+                    target_cmd = [sys.executable, "-u", "main.py", new_sub, "--mode", mode, "--limit", str(limit)]
                     if is_user: target_cmd.append("--user")
                     if no_media: target_cmd.append("--no-media")
                     if no_comments: target_cmd.append("--no-comments")
                     
                     # Start background process
                     import subprocess
-                    import os
                     
                     job_id = f"job_{int(time.time())}"
                     log_file = LOG_DIR / f"{job_id}.log"
@@ -543,13 +560,23 @@ def main():
                             env = os.environ.copy()
                             env['PYTHONIOENCODING'] = 'utf-8'
                             env['PYTHONUNBUFFERED'] = '1'
+                            popen_kwargs = {
+                                "stdout": f,
+                                "stderr": subprocess.STDOUT,
+                                "stdin": subprocess.DEVNULL,
+                                "cwd": str(Path(__file__).parent.parent),
+                                "env": env,
+                            }
+                            # Isolate child process so stopping/reloading Streamlit doesn't kill the scrape job.
+                            if os.name == "nt":
+                                popen_kwargs["creationflags"] = (
+                                    getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                                    | getattr(subprocess, "DETACHED_PROCESS", 0)
+                                )
                             
                             process = subprocess.Popen(
                                 target_cmd,
-                                stdout=f,
-                                stderr=subprocess.STDOUT,
-                                cwd=str(Path(__file__).parent.parent),
-                                env=env
+                                **popen_kwargs
                             )
                         
                         # Save job state
@@ -721,10 +748,14 @@ def main():
                 import subprocess
                 try:
                     # Start API in background (non-blocking)
+                    api_popen_kwargs = {
+                        "cwd": str(Path(__file__).parent.parent),
+                    }
+                    if os.name == "nt":
+                        api_popen_kwargs["creationflags"] = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0)
                     subprocess.Popen(
-                        ["python", "main.py", "--api"],
-                        cwd=str(Path(__file__).parent.parent),
-                        creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
+                        [sys.executable, "main.py", "--api"],
+                        **api_popen_kwargs
                     )
                     st.success(f"✅ API server starting on port {api_port}!")
                     st.markdown(f"**Open:** [http://localhost:{api_port}/docs](http://localhost:{api_port}/docs)")

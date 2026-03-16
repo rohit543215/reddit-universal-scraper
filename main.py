@@ -16,6 +16,8 @@ import subprocess
 import tempfile
 from urllib.parse import urlparse
 from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv()
 
 # --- CONFIGURATION ---
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -743,7 +745,11 @@ Commands:
     if args.dashboard:
         print("\n🌐 Launching Dashboard...")
         print("   Open: http://localhost:8501")
-        os.system("streamlit run dashboard/app.py")
+        try:
+            # Replace this process with Streamlit so behavior matches direct CLI usage.
+            os.execv(sys.executable, [sys.executable, "-m", "streamlit", "run", "dashboard/app.py"])
+        except FileNotFoundError:
+            print("❌ Streamlit not found. Install with: pip install streamlit")
         return
     
     # REST API mode
