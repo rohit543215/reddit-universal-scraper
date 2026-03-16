@@ -10,6 +10,9 @@ aiofiles
 # Dashboard
 streamlit
 
+# NLP
+vaderSentiment
+
 # Export
 openpyxl
 pyarrow
